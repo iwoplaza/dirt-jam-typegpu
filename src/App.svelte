@@ -7,11 +7,14 @@
 
   $effect(() => {
     const abortCtrl = new AbortController();
-    try {
-      game(canvas, abortCtrl.signal);
-    } catch (e) {
-      noWebGPUSupport = true;
-    }
+    (async () => {
+      try {
+        await game(canvas, abortCtrl.signal);
+      } catch (e) {
+        noWebGPUSupport = true;
+        console.error(e);
+      }
+    })();
     return () => {
       abortCtrl.abort();
     };
