@@ -65,7 +65,7 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     pipeline
       .withColorAttachment({
         view: context.getCurrentTexture().createView(),
-        clearValue: [0, 0, 0, 0],
+        clearValue: [1, 1, 1, 1],
         loadOp: 'clear',
         storeOp: 'store',
       })
