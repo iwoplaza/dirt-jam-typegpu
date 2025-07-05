@@ -15,10 +15,10 @@ const settingsSlot = tgpu.slot({
   /** Amount of rotation (in radians) to apply each octave iteration */
   noiseRotation: (30 / 180) * Math.PI,
   /** How many layers of noise to sum. More octaves give more detail with diminishing returns (1, 32) */
-  octaves: 10,
+  octaves: 16,
   /** Value to multiply with amplitude each octave iteration, lower values will reduce the impact of each subsequent octave (0.01, 1.0) */
   amplitudeDecay: 0.45,
-  offset: vec2f(15, 14.2),
+  offset: vec2f(12.21, 9.2),
 });
 
 /**
@@ -64,7 +64,7 @@ export const fbm = tgpu.fn(
     height += n.x;
 
     // add gradient scaled by amplitude and transformed by accumulated rotations
-    grad = add(grad, mul(amplitude, mul(m, n.yz)));
+    grad = add(grad, mul(m, n.yz));
 
     // apply amplitude decay to reduce impact of next noise layer
     amplitude *= settingsSlot.$.amplitudeDecay;

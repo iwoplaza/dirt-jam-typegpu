@@ -88,8 +88,8 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   let prevY = 0;
   // Yaw and pitch angles facing the origin.
   let orbitRadius = 30;
-  let orbitYaw = 0;
-  let orbitPitch = 0;
+  let orbitYaw = 0.09;
+  let orbitPitch = 0.005;
 
   function updateCameraOrbit(dx: number, dy: number) {
     const orbitSensitivity = 0.005;
@@ -219,9 +219,9 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     };
   });
 
-  const fogStart = 45;
-  const fogEnd = 1000;
-  const lightDir = std.normalize(d.vec3f(-0.3, 1, 1));
+  const fogStart = 0;
+  const fogEnd = 600;
+  const lightDir = std.normalize(d.vec3f(1, 0.5, -1));
   const fogColor = d.vec3f(1, 1, 1);
 
   const mainFragment = tgpu['~unstable'].fragmentFn({
@@ -233,14 +233,14 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     const att = std.max(0, std.dot(lightDir, normal));
 
     const shadowColor = d.vec3f(0);
-    const albedo = d.vec3f(0.53, 0.48, 0.4);
+    const albedo = d.vec3f(0.3, 0.28, 0.22);
     const fog = std.pow(
       std.clamp(
         (pixel.z / pixel.w - fogStart) / d.f32(fogEnd - fogStart),
         0,
         1,
       ),
-      2,
+      0.5,
     );
 
     const terrainColor = std.mix(shadowColor, albedo, att);
