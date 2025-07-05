@@ -1,8 +1,8 @@
 import tgpu from 'typegpu';
 import * as d from 'typegpu/data';
 import * as std from 'typegpu/std';
-import { perlin2d, randf } from '@typegpu/noise';
 import { mat4 } from 'wgpu-matrix';
+import { fbm } from './terrain';
 
 export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   const root = await tgpu.init();
@@ -186,111 +186,10 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   const TILES_Z = 1024;
   const _Scale = 200;
 
-  // Self similarity of each octave (0.01, 3.0)
-  const _Lacunarity = 2;
-  // Amplitude of the first noise octave (0.01, 2.0)
-  const _InitialAmplitude = 0.4;
-  // Random adjustment to rotation per octave, adjustment is generated between this range
-  const _AngularVariance = d.vec2f(0);
-  // Amount of rotation (in degrees) to apply each octave iteration (-180.0, 180.0)
-  const _NoiseRotation = 30.0;
-  // How many layers of noise to sum. More octaves give more detail with diminishing returns (1, 32)
-  const _Octaves = 10;
-  // Value to multiply with amplitude each octave iteration, lower values will reduce the impact of each subsequent octave (0.01, 1.0)
-  const _AmplitudeDecay = 0.45;
-  // Random adjustment to frequency per octave, adjustment is generated between this range
-  const _FrequencyVariance = d.vec2f(0);
-
   const Varying = {
     uv: d.vec2f,
     samplePos: d.vec2f,
   };
-
-  // The fractional brownian motion that sums many noise values as explained in the video accompanying this project
-  const fbm = tgpu.fn(
-    [d.vec2f],
-    d.vec3f,
-  )((pos) => {
-    let tPos = d.vec2f(pos);
-    const lacunarity = d.f32(_Lacunarity);
-    let amplitude = d.f32(_InitialAmplitude);
-
-    // height sum
-    let height = d.f32(0);
-
-    // derivative sum
-    let grad = d.vec2f(0);
-
-    // accumulated rotations
-    let m = d.mat2x2f(1, 0, 0, 1);
-
-    randf.seed(123);
-    // generate random angle variance if applicable
-    let angle_variance = std.mix(
-      _AngularVariance.x,
-      _AngularVariance.y,
-      randf.sample(),
-    );
-    let theta = ((_NoiseRotation + angle_variance) * Math.PI) / 180.0;
-
-    // rotation matrix
-    let m2 = d.mat2x2f(
-      d.vec2f(std.cos(theta), -std.sin(theta)),
-      d.vec2f(std.sin(theta), std.cos(theta)),
-    );
-
-    // inverse rotation matrix
-    let m2i = d.mat2x2f(
-      d.vec2f(std.cos(theta), std.sin(theta)),
-      d.vec2f(-std.sin(theta), std.cos(theta)),
-    );
-
-    for (let i = d.u32(0); i < d.u32(_Octaves); i++) {
-      const n = std.mul(amplitude, perlin2d.sampleWithGradient(tPos));
-
-      // add height scaled by current amplitude
-      height += n.x;
-
-      // add gradient scaled by amplitude and transformed by accumulated rotations
-      grad = std.add(grad, std.mul(amplitude, std.mul(m, n.yz)));
-
-      // apply amplitude decay to reduce impact of next noise layer
-      amplitude *= _AmplitudeDecay;
-
-      // generate random angle variance if applicable
-      angle_variance = std.mix(
-        _AngularVariance.x,
-        _AngularVariance.y,
-        randf.sample(),
-      );
-      theta = ((_NoiseRotation + angle_variance) * Math.PI) / 180.0;
-
-      // reconstruct rotation matrix, kind of a performance stink since this is technically expensive and doesn't need to be done if no random angle variance but whatever it's 2025
-      m2 = d.mat2x2f(
-        d.vec2f(std.cos(theta), -std.sin(theta)),
-        d.vec2f(std.sin(theta), std.cos(theta)),
-      );
-
-      // inverse rotation matrix
-      m2i = d.mat2x2f(
-        d.vec2f(std.cos(theta), std.sin(theta)),
-        d.vec2f(-std.sin(theta), std.cos(theta)),
-      );
-
-      // generate frequency variance if applicable
-      const freq_variance = std.mix(
-        _FrequencyVariance.x,
-        _FrequencyVariance.y,
-        randf.sample(),
-      );
-
-      // apply frequency adjustment to sample position for next noise layer
-      tPos = std.mul(lacunarity + freq_variance, std.mul(m2, tPos));
-      m = std.mul(lacunarity + freq_variance, std.mul(m2i, m));
-    }
-
-    return d.vec3f(height, grad);
-  });
 
   const mainVertex = tgpu['~unstable'].vertexFn({
     in: { idx: d.builtin.vertexIndex },
