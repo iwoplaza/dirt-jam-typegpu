@@ -1,6 +1,7 @@
 import tgpu from 'typegpu';
 import * as d from 'typegpu/data';
 import * as std from 'typegpu/std';
+import { perlin2d } from '@typegpu/noise';
 import { mat4 } from 'wgpu-matrix';
 
 export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
@@ -24,12 +25,13 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
       (50 / 180) * Math.PI,
       aspect,
       0.01,
-      100,
+      1000,
       d.mat4x4f(),
     );
+    const dist = 10;
     const view = mat4.lookAt(
-      d.vec3f(-5, 4, -5),
-      d.vec3f(10, 0, 10),
+      std.mul(dist, d.vec3f(-5, 4, -5)),
+      std.mul(dist, d.vec3f(10, 0, 10)),
       d.vec3f(0, 1, 0),
       d.mat4x4f(),
     );
@@ -42,11 +44,20 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   });
   resizeObserver.observe(canvas);
 
-  const TILES_X = 32;
-  const TILES_Z = 32;
+  const TILES_X = 1024;
+  const TILES_Z = 1024;
+  const TERRAIN_FREQ = 0.02;
+  const TERRAIN_PERIOD = 1 / TERRAIN_FREQ;
+  const TERRAIN_HEIGHT = 10;
+
+  const Varying = {
+    uv: d.vec2f,
+    samplePos: d.vec2f,
+  };
+
   const mainVertex = tgpu['~unstable'].vertexFn({
     in: { idx: d.builtin.vertexIndex },
-    out: { pos: d.builtin.position, uv: d.vec2f },
+    out: { pos: d.builtin.position, ...Varying },
   })(({ idx }) => {
     const localIdx = idx % 6;
     const tileIdx = idx / 6;
@@ -64,17 +75,36 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     ];
     const origin = d.vec3f(tileX, 0, tileZ);
     const localPos = std.add(origin, localOffset[localIdx]);
+    const samplePos = std.mul(localPos.xz, TERRAIN_FREQ);
+    const worldPos = d.vec3f(
+      localPos.x,
+      localPos.y + perlin2d.sample(samplePos) * TERRAIN_HEIGHT,
+      localPos.z,
+    );
 
     return {
-      pos: std.mul(uniforms.$.viewProj, d.vec4f(localPos, 1)),
+      pos: std.mul(uniforms.$.viewProj, d.vec4f(worldPos, 1)),
+      samplePos,
       uv: localOffset[localIdx].xz,
     };
   });
 
+  const lightDir = std.normalize(d.vec3f(1, 1, 1));
   const mainFragment = tgpu['~unstable'].fragmentFn({
-    in: { uv: d.vec2f },
+    in: { ...Varying },
     out: d.vec4f,
-  })(({ uv }) => d.vec4f(1, uv.x, uv.y, 1));
+  })(({ uv, samplePos }) => {
+    const noise = std.mul(
+      TERRAIN_HEIGHT,
+      perlin2d.sampleWithGradient(samplePos),
+    );
+    const normal = std.normalize(d.vec3f(-noise.y, TERRAIN_PERIOD, -noise.z));
+    const att = std.max(0, std.dot(lightDir, normal));
+
+    const shaderColor = d.vec3f(0.2, 0.2, 0.4);
+    const litColor = d.vec3f(1, 1, 1);
+    return d.vec4f(std.mix(shaderColor, litColor, att), 1);
+  });
 
   const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
   const context = canvas.getContext('webgpu') as GPUCanvasContext;

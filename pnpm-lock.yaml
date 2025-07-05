@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@typegpu/noise':
-        specifier: https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@d2d76eae4001fead99c5b59b34603fff96ca1b0f
-        version: https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@d2d76eae4001fead99c5b59b34603fff96ca1b0f(typegpu@https://pkg.pr.new/software-mansion/TypeGPU/typegpu@e50f734f2d7a7df7e5ba84b3535b8ee86815755b)
+        specifier: https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@f07687f31dad24df905484b705447f0dcc209dfa
+        version: https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@f07687f31dad24df905484b705447f0dcc209dfa(typegpu@https://pkg.pr.new/software-mansion/TypeGPU/typegpu@e50f734f2d7a7df7e5ba84b3535b8ee86815755b)
       typegpu:
         specifier: https://pkg.pr.new/software-mansion/TypeGPU/typegpu@e50f734f2d7a7df7e5ba84b3535b8ee86815755b
         version: https://pkg.pr.new/software-mansion/TypeGPU/typegpu@e50f734f2d7a7df7e5ba84b3535b8ee86815755b
@@ -395,8 +395,8 @@ packages:
   '@tsconfig/svelte@5.0.4':
     resolution: {integrity: sha512-BV9NplVgLmSi4mwKzD8BD/NQ8erOY/nUE/GpgWe2ckx+wIQF5RyRirn/QsSSCPeulVpc3RA/iJt6DpfTIZps0Q==}
 
-  '@typegpu/noise@https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@d2d76eae4001fead99c5b59b34603fff96ca1b0f':
-    resolution: {tarball: https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@d2d76eae4001fead99c5b59b34603fff96ca1b0f}
+  '@typegpu/noise@https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@f07687f31dad24df905484b705447f0dcc209dfa':
+    resolution: {tarball: https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@f07687f31dad24df905484b705447f0dcc209dfa}
     version: 0.0.9
     peerDependencies:
       typegpu: ^0.5.9
@@ -853,7 +853,7 @@ snapshots:
 
   '@tsconfig/svelte@5.0.4': {}
 
-  '@typegpu/noise@https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@d2d76eae4001fead99c5b59b34603fff96ca1b0f(typegpu@https://pkg.pr.new/software-mansion/TypeGPU/typegpu@e50f734f2d7a7df7e5ba84b3535b8ee86815755b)':
+  '@typegpu/noise@https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@f07687f31dad24df905484b705447f0dcc209dfa(typegpu@https://pkg.pr.new/software-mansion/TypeGPU/typegpu@e50f734f2d7a7df7e5ba84b3535b8ee86815755b)':
     dependencies:
       typegpu: https://pkg.pr.new/software-mansion/TypeGPU/typegpu@e50f734f2d7a7df7e5ba84b3535b8ee86815755b
 
