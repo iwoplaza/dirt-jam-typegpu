@@ -43,6 +43,8 @@
   footer {
     position: fixed;
     bottom: 1em;
+    left: 0;
+    right: 0;
     z-index: 100;
   }
 </style>
