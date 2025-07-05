@@ -1,17 +1,59 @@
 import tgpu from 'typegpu';
 import * as d from 'typegpu/data';
 import * as std from 'typegpu/std';
-import { perlin2d } from '@typegpu/noise';
+import { perlin2d, randf } from '@typegpu/noise';
 import { mat4 } from 'wgpu-matrix';
 
 export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   const root = await tgpu.init();
+  const device = root.device;
+  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
   const uniforms = root.createUniform(
     d.struct({
       viewProj: d.mat4x4f,
     }),
   );
+
+  // Textures
+
+  let depthTexture: GPUTexture;
+  let depthTextureView: GPUTextureView;
+  let msaaTexture: GPUTexture;
+  let msaaTextureView: GPUTextureView;
+
+  function createDepthAndMsaaTextures() {
+    if (depthTexture) {
+      depthTexture.destroy();
+    }
+    depthTexture = device.createTexture({
+      size: [canvas.width, canvas.height, 1],
+      format: 'depth24plus',
+      sampleCount: 4,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    depthTextureView = depthTexture.createView();
+
+    if (msaaTexture) {
+      msaaTexture.destroy();
+    }
+    msaaTexture = device.createTexture({
+      size: [canvas.width, canvas.height, 1],
+      format: presentationFormat,
+      sampleCount: 4,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    msaaTextureView = msaaTexture.createView();
+  }
+  createDepthAndMsaaTextures();
+
+  let proj = mat4.identity(d.mat4x4f());
+  let view = mat4.identity(d.mat4x4f());
+
+  function uploadUniforms() {
+    const viewProj = mat4.mul(proj, view, d.mat4x4f());
+    uniforms.writePartial({ viewProj });
+  }
 
   function resizeCanvas(canvas: HTMLCanvasElement) {
     const devicePixelRatio = window.devicePixelRatio;
@@ -21,39 +63,234 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     canvas.height = height;
 
     const aspect = canvas.width / canvas.height;
-    const proj = mat4.perspective(
+    proj = mat4.perspective(
       (50 / 180) * Math.PI,
       aspect,
       0.01,
       1000,
       d.mat4x4f(),
     );
-    const dist = 10;
-    const view = mat4.lookAt(
-      std.mul(dist, d.vec3f(-5, 4, -5)),
-      std.mul(dist, d.vec3f(10, 0, 10)),
-      d.vec3f(0, 1, 0),
-      d.mat4x4f(),
-    );
-    const viewProj = mat4.mul(proj, view, d.mat4x4f());
-    uniforms.writePartial({ viewProj });
+    uploadUniforms();
+    createDepthAndMsaaTextures();
   }
 
+  resizeCanvas(canvas);
   const resizeObserver = new ResizeObserver(() => {
     resizeCanvas(canvas);
   });
   resizeObserver.observe(canvas);
 
+  let isDragging = false;
+  let prevX = 0;
+  let prevY = 0;
+  // Yaw and pitch angles facing the origin.
+  let orbitRadius = 200;
+  let orbitYaw = 0;
+  let orbitPitch = 0.2;
+
+  function updateCameraOrbit(dx: number, dy: number) {
+    const orbitSensitivity = 0.005;
+    orbitYaw += -dx * orbitSensitivity;
+    orbitPitch += dy * orbitSensitivity;
+    // if we didn't limit pitch, it would lead to flipping the camera which is disorienting.
+    const maxPitch = Math.PI / 2 - 0.01;
+    if (orbitPitch > maxPitch) orbitPitch = maxPitch;
+    if (orbitPitch < -maxPitch) orbitPitch = -maxPitch;
+    // basically converting spherical coordinates to cartesian.
+    // like sampling points on a unit sphere and then scaling them by the radius.
+    const newCamX = orbitRadius * Math.sin(orbitYaw) * Math.cos(orbitPitch);
+    const newCamY = orbitRadius * Math.sin(orbitPitch);
+    const newCamZ = orbitRadius * Math.cos(orbitYaw) * Math.cos(orbitPitch);
+    const newCameraPos = d.vec4f(newCamX, newCamY, newCamZ, 1);
+
+    view = mat4.lookAt(newCameraPos, d.vec3f(0), d.vec3f(0, 1, 0), d.mat4x4f());
+    const viewProj = mat4.mul(proj, view, d.mat4x4f());
+    uniforms.writePartial({ viewProj });
+  }
+
+  canvas.addEventListener('wheel', (event: WheelEvent) => {
+    event.preventDefault();
+    const zoomSensitivity = 0.05;
+    orbitRadius = Math.max(1, orbitRadius + event.deltaY * zoomSensitivity);
+    const newCamX = orbitRadius * Math.sin(orbitYaw) * Math.cos(orbitPitch);
+    const newCamY = orbitRadius * Math.sin(orbitPitch);
+    const newCamZ = orbitRadius * Math.cos(orbitYaw) * Math.cos(orbitPitch);
+    const newCameraPos = d.vec4f(newCamX, newCamY, newCamZ, 1);
+    const newView = mat4.lookAt(
+      newCameraPos,
+      d.vec3f(0),
+      d.vec3f(0, 1, 0),
+      d.mat4x4f(),
+    );
+    const viewProj = mat4.mul(proj, newView, d.mat4x4f());
+    uniforms.writePartial({ viewProj });
+  });
+
+  canvas.addEventListener('mousedown', (event) => {
+    if (event.button === 0) {
+      // Left Mouse Button controls Camera Orbit.
+      isDragging = true;
+    }
+    prevX = event.clientX;
+    prevY = event.clientY;
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+
+  canvas.addEventListener('mousemove', (event) => {
+    const dx = event.clientX - prevX;
+    const dy = event.clientY - prevY;
+    prevX = event.clientX;
+    prevY = event.clientY;
+
+    if (isDragging) {
+      updateCameraOrbit(dx, dy);
+    }
+  });
+
+  // Mobile touch support.
+  canvas.addEventListener('touchstart', (event: TouchEvent) => {
+    event.preventDefault();
+    if (event.touches.length === 1) {
+      // Single touch controls Camera Orbit.
+      isDragging = true;
+    }
+    // Use the first touch for rotation.
+    prevX = event.touches[0].clientX;
+    prevY = event.touches[0].clientY;
+  });
+
+  canvas.addEventListener('touchmove', (event: TouchEvent) => {
+    event.preventDefault();
+    const touch = event.touches[0];
+    const dx = touch.clientX - prevX;
+    const dy = touch.clientY - prevY;
+    prevX = touch.clientX;
+    prevY = touch.clientY;
+
+    if (isDragging && event.touches.length === 1) {
+      updateCameraOrbit(dx, dy);
+    }
+  });
+
+  canvas.addEventListener('touchend', (event: TouchEvent) => {
+    event.preventDefault();
+    if (event.touches.length === 0) {
+      isDragging = false;
+    }
+  });
+
   const TILES_X = 1024;
   const TILES_Z = 1024;
-  const TERRAIN_FREQ = 0.02;
-  const TERRAIN_PERIOD = 1 / TERRAIN_FREQ;
-  const TERRAIN_HEIGHT = 10;
+  const _Scale = 200;
+
+  // Self similarity of each octave (0.01, 3.0)
+  const _Lacunarity = 2;
+  // Amplitude of the first noise octave (0.01, 2.0)
+  const _InitialAmplitude = 0.4;
+  // Random adjustment to rotation per octave, adjustment is generated between this range
+  const _AngularVariance = d.vec2f(0);
+  // Amount of rotation (in degrees) to apply each octave iteration (-180.0, 180.0)
+  const _NoiseRotation = 30.0;
+  // How many layers of noise to sum. More octaves give more detail with diminishing returns (1, 32)
+  const _Octaves = 10;
+  // Value to multiply with amplitude each octave iteration, lower values will reduce the impact of each subsequent octave (0.01, 1.0)
+  const _AmplitudeDecay = 0.45;
+  // Random adjustment to frequency per octave, adjustment is generated between this range
+  const _FrequencyVariance = d.vec2f(0);
 
   const Varying = {
     uv: d.vec2f,
     samplePos: d.vec2f,
   };
+
+  // The fractional brownian motion that sums many noise values as explained in the video accompanying this project
+  const fbm = tgpu.fn(
+    [d.vec2f],
+    d.vec3f,
+  )((pos) => {
+    let tPos = d.vec2f(pos);
+    const lacunarity = d.f32(_Lacunarity);
+    let amplitude = d.f32(_InitialAmplitude);
+
+    // height sum
+    let height = d.f32(0);
+
+    // derivative sum
+    let grad = d.vec2f(0);
+
+    // accumulated rotations
+    let m = d.mat2x2f(1, 0, 0, 1);
+
+    randf.seed(123);
+    // generate random angle variance if applicable
+    let angle_variance = std.mix(
+      _AngularVariance.x,
+      _AngularVariance.y,
+      randf.sample(),
+    );
+    let theta = ((_NoiseRotation + angle_variance) * Math.PI) / 180.0;
+
+    // rotation matrix
+    let m2 = d.mat2x2f(
+      d.vec2f(std.cos(theta), -std.sin(theta)),
+      d.vec2f(std.sin(theta), std.cos(theta)),
+    );
+
+    // inverse rotation matrix
+    let m2i = d.mat2x2f(
+      d.vec2f(std.cos(theta), std.sin(theta)),
+      d.vec2f(-std.sin(theta), std.cos(theta)),
+    );
+
+    for (let i = d.u32(0); i < d.u32(_Octaves); i++) {
+      const n = std.mul(amplitude, perlin2d.sampleWithGradient(tPos));
+
+      // add height scaled by current amplitude
+      height += n.x;
+
+      // add gradient scaled by amplitude and transformed by accumulated rotations
+      grad = std.add(grad, std.mul(amplitude, std.mul(m, n.yz)));
+
+      // apply amplitude decay to reduce impact of next noise layer
+      amplitude *= _AmplitudeDecay;
+
+      // generate random angle variance if applicable
+      angle_variance = std.mix(
+        _AngularVariance.x,
+        _AngularVariance.y,
+        randf.sample(),
+      );
+      theta = ((_NoiseRotation + angle_variance) * Math.PI) / 180.0;
+
+      // reconstruct rotation matrix, kind of a performance stink since this is technically expensive and doesn't need to be done if no random angle variance but whatever it's 2025
+      m2 = d.mat2x2f(
+        d.vec2f(std.cos(theta), -std.sin(theta)),
+        d.vec2f(std.sin(theta), std.cos(theta)),
+      );
+
+      // inverse rotation matrix
+      m2i = d.mat2x2f(
+        d.vec2f(std.cos(theta), std.sin(theta)),
+        d.vec2f(-std.sin(theta), std.cos(theta)),
+      );
+
+      // generate frequency variance if applicable
+      const freq_variance = std.mix(
+        _FrequencyVariance.x,
+        _FrequencyVariance.y,
+        randf.sample(),
+      );
+
+      // apply frequency adjustment to sample position for next noise layer
+      tPos = std.mul(lacunarity + freq_variance, std.mul(m2, tPos));
+      m = std.mul(lacunarity + freq_variance, std.mul(m2i, m));
+    }
+
+    return d.vec3f(height, grad);
+  });
 
   const mainVertex = tgpu['~unstable'].vertexFn({
     in: { idx: d.builtin.vertexIndex },
@@ -73,12 +310,13 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
       d.vec3f(1, 0, 1),
       d.vec3f(1, 0, 0),
     ];
-    const origin = d.vec3f(tileX, 0, tileZ);
+    const origin = d.vec3f(tileX - TILES_X / 2, 0, tileZ - TILES_Z / 2);
     const localPos = std.add(origin, localOffset[localIdx]);
-    const samplePos = std.mul(localPos.xz, TERRAIN_FREQ);
+    const samplePos = std.div(localPos.xz, _Scale);
+    const noise = fbm(samplePos);
     const worldPos = d.vec3f(
       localPos.x,
-      localPos.y + perlin2d.sample(samplePos) * TERRAIN_HEIGHT,
+      localPos.y + noise.x * _Scale,
       localPos.z,
     );
 
@@ -94,11 +332,8 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     in: { ...Varying },
     out: d.vec4f,
   })(({ uv, samplePos }) => {
-    const noise = std.mul(
-      TERRAIN_HEIGHT,
-      perlin2d.sampleWithGradient(samplePos),
-    );
-    const normal = std.normalize(d.vec3f(-noise.y, TERRAIN_PERIOD, -noise.z));
+    const noise = fbm(samplePos);
+    const normal = std.normalize(d.vec3f(-noise.y, 1, -noise.z));
     const att = std.max(0, std.dot(lightDir, normal));
 
     const shaderColor = d.vec3f(0.2, 0.2, 0.4);
@@ -106,7 +341,6 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     return d.vec4f(std.mix(shaderColor, litColor, att), 1);
   });
 
-  const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
   const context = canvas.getContext('webgpu') as GPUCanvasContext;
 
   context.configure({
@@ -118,16 +352,34 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   const pipeline = root['~unstable']
     .withVertex(mainVertex, {})
     .withFragment(mainFragment, { format: presentationFormat })
+    .withDepthStencil({
+      format: 'depth24plus',
+      depthWriteEnabled: true,
+      depthCompare: 'less',
+    })
+    .withMultisample({
+      count: 4,
+    })
+    .withPrimitive({
+      cullMode: 'back',
+    })
     .createPipeline();
 
   let animationFrame: number;
   function run() {
     pipeline
       .withColorAttachment({
-        view: context.getCurrentTexture().createView(),
+        view: msaaTextureView,
+        resolveTarget: context.getCurrentTexture().createView(),
         clearValue: [1, 1, 1, 1],
         loadOp: 'clear',
         storeOp: 'store',
+      })
+      .withDepthStencilAttachment({
+        view: depthTextureView,
+        depthClearValue: 1,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store',
       })
       .draw(6 * TILES_X * TILES_Z);
 
@@ -141,5 +393,5 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     root.destroy();
   });
 
-  await root.device.queue.onSubmittedWorkDone();
+  updateCameraOrbit(0, 0);
 }
