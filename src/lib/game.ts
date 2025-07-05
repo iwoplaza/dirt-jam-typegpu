@@ -3,11 +3,14 @@ import * as d from 'typegpu/data';
 import * as std from 'typegpu/std';
 import { mat4 } from 'wgpu-matrix';
 import { fbm } from './terrain';
+import { perlin2d } from '@typegpu/noise';
 
 export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   const root = await tgpu.init();
   const device = root.device;
   const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+
+  const perlinCache = perlin2d.staticCache({ root, size: d.vec2u(16) });
 
   const uniforms = root.createUniform(
     d.struct({
@@ -84,7 +87,7 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   let prevX = 0;
   let prevY = 0;
   // Yaw and pitch angles facing the origin.
-  let orbitRadius = 200;
+  let orbitRadius = 20;
   let orbitYaw = 0;
   let orbitPitch = 0.2;
 
@@ -98,9 +101,10 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     if (orbitPitch < -maxPitch) orbitPitch = -maxPitch;
     // basically converting spherical coordinates to cartesian.
     // like sampling points on a unit sphere and then scaling them by the radius.
-    const newCamX = orbitRadius * Math.sin(orbitYaw) * Math.cos(orbitPitch);
-    const newCamY = orbitRadius * Math.sin(orbitPitch);
-    const newCamZ = orbitRadius * Math.cos(orbitYaw) * Math.cos(orbitPitch);
+    const logOrbitRadius = orbitRadius ** 2;
+    const newCamX = logOrbitRadius * Math.sin(orbitYaw) * Math.cos(orbitPitch);
+    const newCamY = logOrbitRadius * Math.sin(orbitPitch);
+    const newCamZ = logOrbitRadius * Math.cos(orbitYaw) * Math.cos(orbitPitch);
     const newCameraPos = d.vec4f(newCamX, newCamY, newCamZ, 1);
 
     view = mat4.lookAt(newCameraPos, d.vec3f(0), d.vec3f(0, 1, 0), d.mat4x4f());
@@ -110,20 +114,9 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
 
   canvas.addEventListener('wheel', (event: WheelEvent) => {
     event.preventDefault();
-    const zoomSensitivity = 0.05;
+    const zoomSensitivity = 0.005;
     orbitRadius = Math.max(1, orbitRadius + event.deltaY * zoomSensitivity);
-    const newCamX = orbitRadius * Math.sin(orbitYaw) * Math.cos(orbitPitch);
-    const newCamY = orbitRadius * Math.sin(orbitPitch);
-    const newCamZ = orbitRadius * Math.cos(orbitYaw) * Math.cos(orbitPitch);
-    const newCameraPos = d.vec4f(newCamX, newCamY, newCamZ, 1);
-    const newView = mat4.lookAt(
-      newCameraPos,
-      d.vec3f(0),
-      d.vec3f(0, 1, 0),
-      d.mat4x4f(),
-    );
-    const viewProj = mat4.mul(proj, newView, d.mat4x4f());
-    uniforms.writePartial({ viewProj });
+    updateCameraOrbit(0, 0);
   });
 
   canvas.addEventListener('mousedown', (event) => {
@@ -249,6 +242,7 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   });
 
   const pipeline = root['~unstable']
+    .with(perlin2d.getJunctionGradientSlot, perlinCache.getJunctionGradient)
     .withVertex(mainVertex, {})
     .withFragment(mainFragment, { format: presentationFormat })
     .withDepthStencil({

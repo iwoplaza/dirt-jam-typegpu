@@ -17,13 +17,13 @@
     "svelte": "^5.34.7",
     "svelte-check": "^4.2.2",
     "typescript": "~5.8.3",
-    "unplugin-typegpu": "^0.1.4",
+    "unplugin-typegpu": "https://pkg.pr.new/software-mansion/TypeGPU/unplugin-typegpu@4c46cebc57c3f1a8f3a995d501ac0c8dd44ba484",
     "vite": "^7.0.0"
   },
   "packageManager": "pnpm@10.12.4+sha512.5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184",
   "dependencies": {
-    "@typegpu/noise": "https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@f07687f31dad24df905484b705447f0dcc209dfa",
-    "typegpu": "https://pkg.pr.new/software-mansion/TypeGPU/typegpu@e50f734f2d7a7df7e5ba84b3535b8ee86815755b",
+    "@typegpu/noise": "https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@56aad44cc075011e6eb4401ee603cb780ff3d088",
+    "typegpu": "https://pkg.pr.new/software-mansion/TypeGPU/typegpu@4c46cebc57c3f1a8f3a995d501ac0c8dd44ba484",
     "wgpu-matrix": "^3.4.0"
   }
 }
