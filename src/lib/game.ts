@@ -87,9 +87,9 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   let prevX = 0;
   let prevY = 0;
   // Yaw and pitch angles facing the origin.
-  let orbitRadius = 20;
+  let orbitRadius = 30;
   let orbitYaw = 0;
-  let orbitPitch = 0.2;
+  let orbitPitch = 0;
 
   function updateCameraOrbit(dx: number, dy: number) {
     const orbitSensitivity = 0.005;
@@ -175,9 +175,9 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     }
   });
 
-  const TILES_X = 1024;
-  const TILES_Z = 1024;
-  const _Scale = 200;
+  const TILES_X = 2048;
+  const TILES_Z = 2048;
+  const _Scale = 300;
 
   const Varying = {
     uv: d.vec2f,
@@ -219,18 +219,33 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     };
   });
 
-  const lightDir = std.normalize(d.vec3f(1, 1, 1));
+  const fogStart = 45;
+  const fogEnd = 1000;
+  const lightDir = std.normalize(d.vec3f(-0.3, 1, 1));
+  const fogColor = d.vec3f(1, 1, 1);
+
   const mainFragment = tgpu['~unstable'].fragmentFn({
-    in: { ...Varying },
+    in: { ...Varying, pixel: d.builtin.position },
     out: d.vec4f,
-  })(({ uv, samplePos }) => {
+  })(({ uv, samplePos, pixel }) => {
     const noise = fbm(samplePos);
     const normal = std.normalize(d.vec3f(-noise.y, 1, -noise.z));
     const att = std.max(0, std.dot(lightDir, normal));
 
-    const shaderColor = d.vec3f(0.2, 0.2, 0.4);
-    const litColor = d.vec3f(1, 1, 1);
-    return d.vec4f(std.mix(shaderColor, litColor, att), 1);
+    const shadowColor = d.vec3f(0);
+    const albedo = d.vec3f(0.53, 0.48, 0.4);
+    const fog = std.pow(
+      std.clamp(
+        (pixel.z / pixel.w - fogStart) / d.f32(fogEnd - fogStart),
+        0,
+        1,
+      ),
+      2,
+    );
+
+    const terrainColor = std.mix(shadowColor, albedo, att);
+    const fogified = std.mix(terrainColor, fogColor, fog);
+    return d.vec4f(fogified, 1);
   });
 
   const context = canvas.getContext('webgpu') as GPUCanvasContext;

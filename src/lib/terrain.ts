@@ -18,6 +18,7 @@ const settingsSlot = tgpu.slot({
   octaves: 10,
   /** Value to multiply with amplitude each octave iteration, lower values will reduce the impact of each subsequent octave (0.01, 1.0) */
   amplitudeDecay: 0.45,
+  offset: vec2f(15, 14.2),
 });
 
 /**
@@ -27,7 +28,7 @@ export const fbm = tgpu.fn(
   [vec2f],
   vec3f,
 )((pos) => {
-  let tPos = vec2f(pos);
+  let tPos = vec2f(add(pos, settingsSlot.$.offset));
   const lacunarity = f32(settingsSlot.$.lacunarity);
   let amplitude = f32(settingsSlot.$.baseAmplitude);
 
