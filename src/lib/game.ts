@@ -238,7 +238,7 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   const fogColor = d.vec3f(0.75, 0.8, 0.9);
   const slopeDamping = 4;
   /** If the slope is less than the low threshold, outputs  [code]low_slope_color[/code]. If the slope is greater than the upper threshold, outputs  [code]high_slope_color[/code]. If inbetween, blend between the colors. */
-  const slopeRange = d.vec2f(0.4, 0.7);
+  const slopeRange = d.vec2f(0.6, 0.9);
   /** Color of flatter areas of terrain */
   const lowSlopeColor = d.vec3f(0.3, 0.5, 0.3);
   /** Color of steeper areas of terrain */
