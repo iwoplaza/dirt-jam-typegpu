@@ -2,7 +2,7 @@ import tgpu from 'typegpu';
 import * as d from 'typegpu/data';
 import * as std from 'typegpu/std';
 import { mat4 } from 'wgpu-matrix';
-import { fbm } from './terrain';
+import { fbm, fbmWithDoubleGradient } from './terrain';
 import { perlin2d } from '@typegpu/noise';
 
 const smoothstep = tgpu.fn([d.f32, d.f32, d.f32], d.f32)`(a, b, t) {
@@ -188,13 +188,14 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     }
   });
 
-  const TILES_X = 2048;
-  const TILES_Z = 2048;
+  const TILES_X = 512;
+  const TILES_Z = 512;
   const _Scale = 300;
 
   const Varying = {
     uv: d.vec2f,
     samplePos: d.vec2f,
+    worldPos: d.vec3f,
   };
 
   const mainVertex = tgpu['~unstable'].vertexFn({
@@ -218,16 +219,17 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     const origin = d.vec3f(tileX - TILES_X / 2, 0, tileZ - TILES_Z / 2);
     const localPos = std.add(origin, localOffset[localIdx]);
     const samplePos = std.div(localPos.xz, _Scale);
-    const result = fbm(samplePos);
+    const height = fbm(samplePos, 10);
     const worldPos = d.vec3f(
       localPos.x,
-      localPos.y + result.height * _Scale,
+      localPos.y + height * _Scale,
       localPos.z,
     );
 
     return {
       pos: std.mul(uniforms.$.viewProj, d.vec4f(worldPos, 1)),
       samplePos,
+      worldPos,
       uv: localOffset[localIdx].xz,
     };
   });
@@ -244,13 +246,52 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   /** Color of steeper areas of terrain */
   const highSlopeColor = d.vec3f(0.3, 0.28, 0.22);
 
+  const rayMarchShadow = tgpu.fn(
+    [d.vec3f, d.f32, d.f32],
+    d.f32,
+  )((origin, start, end) => {
+    let t = start;
+    const maxIterations = 20;
+    const threshold = 0.5;
+    let i = 0;
+    let height = d.f32(0);
+    let pos = d.vec3f();
+    while (i < maxIterations && t < end) {
+      pos = std.add(origin, std.mul(lightDir, t));
+      const samplePos = std.div(pos.xz, _Scale);
+      height = fbm(samplePos, 6) * _Scale;
+      if (pos.y + threshold < height) {
+        // Under the terrain
+        break;
+      }
+      // Basing the step on how far away from the terrain we currently are, which should
+      // improve accuracy.
+      const step = 10;
+      t += step;
+      i++;
+    }
+
+    if (t < end && pos.y + threshold > height) {
+      return end + 1;
+    }
+
+    return t;
+  });
+
   const mainFragment = tgpu['~unstable'].fragmentFn({
     in: { ...Varying, pixel: d.builtin.position },
     out: d.vec4f,
-  })(({ uv, samplePos, pixel }) => {
-    const result = fbm(samplePos);
+  })(({ uv, samplePos, worldPos, pixel }) => {
+    const result = fbmWithDoubleGradient(samplePos, 6, 16);
     const normal = std.normalize(d.vec3f(-result.grad.x, 1, -result.grad.y));
     const att = std.max(0, std.dot(lightDir, normal));
+    let light = att;
+
+    const maxShadowDist = 50;
+    const shadowDist = rayMarchShadow(worldPos, 1, maxShadowDist);
+    if (shadowDist < maxShadowDist) {
+      light *= 0.2;
+    }
 
     // To more easily customize the color slope blending this is a separate normal vector with its horizontal gradients significantly reduced so the normal points upwards more
     const slopeNormal = std.normalize(
@@ -284,7 +325,7 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
       0.5,
     );
 
-    const terrainColor = std.mix(shadowColor, albedo, att);
+    const terrainColor = std.mix(shadowColor, albedo, light);
     const fogified = std.mix(terrainColor, fogColor, fog);
     return d.vec4f(fogified, 1);
   });
@@ -298,7 +339,7 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   });
 
   const pipeline = root['~unstable']
-    .with(perlin2d.getJunctionGradientSlot, perlinCache.getJunctionGradient)
+    .pipe(perlinCache.inject())
     .withVertex(mainVertex, {})
     .withFragment(mainFragment, { format: presentationFormat })
     .withDepthStencil({

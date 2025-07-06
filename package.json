@@ -22,8 +22,8 @@
   },
   "packageManager": "pnpm@10.12.4+sha512.5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184",
   "dependencies": {
-    "@typegpu/noise": "https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@56aad44cc075011e6eb4401ee603cb780ff3d088",
-    "typegpu": "https://pkg.pr.new/software-mansion/TypeGPU/typegpu@4c46cebc57c3f1a8f3a995d501ac0c8dd44ba484",
+    "@typegpu/noise": "https://pkg.pr.new/software-mansion/TypeGPU/@typegpu/noise@c3ea56a9d2b1d74df977598e5a104dca86413d70",
+    "typegpu": "https://pkg.pr.new/software-mansion/TypeGPU/typegpu@c3ea56a9d2b1d74df977598e5a104dca86413d70",
     "wgpu-matrix": "^3.4.0"
   }
 }
