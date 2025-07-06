@@ -1,5 +1,5 @@
 import tgpu from 'typegpu';
-import { vec2f, vec3f, f32, mat2x2f, u32 } from 'typegpu/data';
+import { vec2f, f32, mat2x2f, u32, struct } from 'typegpu/data';
 import { add, cos, mul, sin } from 'typegpu/std';
 import { perlin2d } from '@typegpu/noise';
 
@@ -16,9 +16,17 @@ const settingsSlot = tgpu.slot({
   noiseRotation: (30 / 180) * Math.PI,
   /** How many layers of noise to sum. More octaves give more detail with diminishing returns (1, 32) */
   octaves: 16,
+  /** Amount of layers used for computing the "smooth" gradient, used for material blending */
+  smoothOctaves: 6,
   /** Value to multiply with amplitude each octave iteration, lower values will reduce the impact of each subsequent octave (0.01, 1.0) */
   amplitudeDecay: 0.45,
   offset: vec2f(12.21, 9.2),
+});
+
+const FbmResult = struct({
+  grad: vec2f,
+  smoothGrad: vec2f,
+  height: f32,
 });
 
 /**
@@ -26,7 +34,7 @@ const settingsSlot = tgpu.slot({
  */
 export const fbm = tgpu.fn(
   [vec2f],
-  vec3f,
+  FbmResult,
 )((pos) => {
   const lacunarity = f32(settingsSlot.$.lacunarity);
   const theta = f32(settingsSlot.$.noiseRotation);
@@ -36,8 +44,9 @@ export const fbm = tgpu.fn(
   // height sum
   let height = f32(0);
 
-  // derivative sum
+  // derivative sums
   let grad = vec2f(0);
+  let smoothGrad = vec2f(0);
 
   // accumulated rotations
   let m = mat2x2f(1, 0, 0, 1);
@@ -62,6 +71,9 @@ export const fbm = tgpu.fn(
 
     // add gradient scaled by amplitude and transformed by accumulated rotations
     grad = add(grad, mul(m, n.yz));
+    if (i === settingsSlot.$.smoothOctaves) {
+      smoothGrad = grad;
+    }
 
     // apply amplitude decay to reduce impact of next noise layer
     amplitude *= settingsSlot.$.amplitudeDecay;
@@ -80,5 +92,9 @@ export const fbm = tgpu.fn(
     m = mul(lacunarity, mul(m2i, m));
   }
 
-  return vec3f(height, grad);
+  return {
+    grad,
+    smoothGrad,
+    height,
+  };
 });

@@ -5,6 +5,10 @@ import { mat4 } from 'wgpu-matrix';
 import { fbm } from './terrain';
 import { perlin2d } from '@typegpu/noise';
 
+const smoothstep = tgpu.fn([d.f32, d.f32, d.f32], d.f32)`(a, b, t) {
+  return smoothstep(a, b, t);
+}`;
+
 export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   const root = await tgpu.init();
   const device = root.device;
@@ -214,10 +218,10 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     const origin = d.vec3f(tileX - TILES_X / 2, 0, tileZ - TILES_Z / 2);
     const localPos = std.add(origin, localOffset[localIdx]);
     const samplePos = std.div(localPos.xz, _Scale);
-    const noise = fbm(samplePos);
+    const result = fbm(samplePos);
     const worldPos = d.vec3f(
       localPos.x,
-      localPos.y + noise.x * _Scale,
+      localPos.y + result.height * _Scale,
       localPos.z,
     );
 
@@ -229,20 +233,48 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   });
 
   const fogStart = 0;
-  const fogEnd = 600;
-  const lightDir = std.normalize(d.vec3f(1, 0.5, -1));
-  const fogColor = d.vec3f(1, 1, 1);
+  const fogEnd = 1000;
+  const lightDir = std.normalize(d.vec3f(1, 0.5, -0.5));
+  const fogColor = d.vec3f(0.75, 0.8, 0.9);
+  const slopeDamping = 4;
+  /** If the slope is less than the low threshold, outputs  [code]low_slope_color[/code]. If the slope is greater than the upper threshold, outputs  [code]high_slope_color[/code]. If inbetween, blend between the colors. */
+  const slopeRange = d.vec2f(0.4, 0.7);
+  /** Color of flatter areas of terrain */
+  const lowSlopeColor = d.vec3f(0.3, 0.5, 0.3);
+  /** Color of steeper areas of terrain */
+  const highSlopeColor = d.vec3f(0.3, 0.28, 0.22);
 
   const mainFragment = tgpu['~unstable'].fragmentFn({
     in: { ...Varying, pixel: d.builtin.position },
     out: d.vec4f,
   })(({ uv, samplePos, pixel }) => {
-    const noise = fbm(samplePos);
-    const normal = std.normalize(d.vec3f(-noise.y, 1, -noise.z));
+    const result = fbm(samplePos);
+    const normal = std.normalize(d.vec3f(-result.grad.x, 1, -result.grad.y));
     const att = std.max(0, std.dot(lightDir, normal));
 
-    const shadowColor = d.vec3f(0);
-    const albedo = d.vec3f(0.3, 0.28, 0.22);
+    // To more easily customize the color slope blending this is a separate normal vector with its horizontal gradients significantly reduced so the normal points upwards more
+    const slopeNormal = std.normalize(
+      std.mul(
+        d.vec3f(-result.smoothGrad.x, 1, -result.smoothGrad.y),
+        d.vec3f(slopeDamping, 1, slopeDamping),
+      ),
+    );
+
+    // Use the slope of the above normal to create the blend value between the two terrain colors
+    const material_blend_factor = smoothstep(
+      slopeRange.x,
+      slopeRange.y,
+      1 - slopeNormal.y,
+    );
+
+    // Blend between the two terrain colors
+    const albedo = std.mix(
+      lowSlopeColor,
+      highSlopeColor,
+      material_blend_factor,
+    );
+
+    const shadowColor = std.mul(albedo, 0.2);
     const fog = std.pow(
       std.clamp(
         (pixel.z / pixel.w - fogStart) / d.f32(fogEnd - fogStart),
@@ -288,7 +320,7 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
       .withColorAttachment({
         view: msaaTextureView,
         resolveTarget: context.getCurrentTexture().createView(),
-        clearValue: [1, 1, 1, 1],
+        clearValue: [...fogColor, 1],
         loadOp: 'clear',
         storeOp: 'store',
       })
