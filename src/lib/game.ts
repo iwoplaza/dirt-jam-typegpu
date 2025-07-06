@@ -87,11 +87,20 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
   let prevX = 0;
   let prevY = 0;
   // Yaw and pitch angles facing the origin.
-  let orbitRadius = 30;
-  let orbitYaw = 0.09;
-  let orbitPitch = 0.005;
+  // let orbitRadius = 30;
+  // let orbitYaw = 0.09;
+  // let orbitPitch = 0.005;
+  let orbitRadius = 23.6;
+  let orbitYaw = -12.78;
+  let orbitPitch = 0.01;
 
   function updateCameraOrbit(dx: number, dy: number) {
+    console.log({
+      orbitRadius,
+      orbitYaw,
+      orbitPitch,
+    });
+
     const orbitSensitivity = 0.005;
     orbitYaw += -dx * orbitSensitivity;
     orbitPitch += dy * orbitSensitivity;

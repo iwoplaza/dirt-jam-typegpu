@@ -1,7 +1,7 @@
 import tgpu from 'typegpu';
 import { vec2f, vec3f, f32, mat2x2f, u32 } from 'typegpu/data';
 import { add, cos, mul, sin } from 'typegpu/std';
-import { perlin2d, randf } from '@typegpu/noise';
+import { perlin2d } from '@typegpu/noise';
 
 /**
  * Can be swapped with a different value at compile time, but
@@ -28,8 +28,9 @@ export const fbm = tgpu.fn(
   [vec2f],
   vec3f,
 )((pos) => {
-  let tPos = vec2f(add(pos, settingsSlot.$.offset));
   const lacunarity = f32(settingsSlot.$.lacunarity);
+  const theta = f32(settingsSlot.$.noiseRotation);
+  let tPos = add(pos, settingsSlot.$.offset);
   let amplitude = f32(settingsSlot.$.baseAmplitude);
 
   // height sum
@@ -40,10 +41,6 @@ export const fbm = tgpu.fn(
 
   // accumulated rotations
   let m = mat2x2f(1, 0, 0, 1);
-
-  randf.seed(123);
-
-  const theta = settingsSlot.$.noiseRotation;
 
   // rotation matrix
   let m2 = mat2x2f(
