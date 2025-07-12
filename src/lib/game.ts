@@ -287,7 +287,7 @@ export async function game(canvas: HTMLCanvasElement, signal: AbortSignal) {
     const att = std.max(0, std.dot(lightDir, normal));
     let light = att;
 
-    const maxShadowDist = 50;
+    const maxShadowDist = d.f32(50);
     const shadowDist = rayMarchShadow(worldPos, 1, maxShadowDist);
     if (shadowDist < maxShadowDist) {
       light *= 0.2;
